@@ -1,5 +1,6 @@
-# Deploy Coolify: Build strategy = Docker Compose → docker-compose.yml
-# Domain: servizio vikunja, porta interna 3456
+# Coolify: Build strategy = Docker Compose → /docker-compose.yaml
+# Domain sul servizio vikunja, porta interna 3456
+# (es. https://vikunja.example.com:3456)
 
 services:
   vikunja:
@@ -8,14 +9,23 @@ services:
       dockerfile: Dockerfile
       args:
         RELEASE_VERSION: ${RELEASE_VERSION:-dev}
+    # Named volume Coolify = root. L'immagine gira come 1000 e crasha su
+    # "failed to create test file: permission denied" se non forziamo uid 0.
+    user: "0:0"
+    expose:
+      - "3456"
     environment:
-      VIKUNJA_SERVICE_PUBLICURL: ${VIKUNJA_SERVICE_PUBLICURL:-${SERVICE_URL_VIKUNJA_3456}}
-      VIKUNJA_SERVICE_SECRET: ${VIKUNJA_SERVICE_SECRET:-${SERVICE_PASSWORD_VIKUNJA}}
+      VIKUNJA_SERVICE_INTERFACE: ":3456"
+      # SERVICE_URL_VIKUNJA lo genera Coolify dal dominio. Fallback per non
+      # crashare al primo deploy (cors.enable richiede publicurl).
+      VIKUNJA_SERVICE_PUBLICURL: ${SERVICE_URL_VIKUNJA:-http://localhost:3456}
+      VIKUNJA_SERVICE_SECRET: ${SERVICE_PASSWORD_VIKUNJA}
       VIKUNJA_DATABASE_HOST: db
       VIKUNJA_DATABASE_TYPE: postgres
       VIKUNJA_DATABASE_USER: ${POSTGRES_USER:-vikunja}
-      VIKUNJA_DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-${SERVICE_PASSWORD_POSTGRES}}
+      VIKUNJA_DATABASE_PASSWORD: ${SERVICE_PASSWORD_POSTGRES}
       VIKUNJA_DATABASE_DATABASE: ${POSTGRES_DB:-vikunja}
+      VIKUNJA_DATABASE_SSLMODE: disable
     volumes:
       - vikunja_files:/app/vikunja/files
     depends_on:
@@ -25,15 +35,15 @@ services:
       test: ["CMD", "/app/vikunja/vikunja", "healthcheck"]
       interval: 30s
       timeout: 15s
-      retries: 3
-      start_period: 45s
+      retries: 5
+      start_period: 60s
     restart: unless-stopped
 
   db:
     image: postgres:18
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-vikunja}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-${SERVICE_PASSWORD_POSTGRES}}
+      POSTGRES_PASSWORD: ${SERVICE_PASSWORD_POSTGRES}
       POSTGRES_DB: ${POSTGRES_DB:-vikunja}
     volumes:
       - postgres_data:/var/lib/postgresql
