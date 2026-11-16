@@ -1,0 +1,50 @@
+# Deploy Coolify: Build strategy = Docker Compose → docker-compose.yml
+# Domain: servizio vikunja, porta interna 3456
+
+services:
+  vikunja:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        RELEASE_VERSION: ${RELEASE_VERSION:-dev}
+    environment:
+      VIKUNJA_SERVICE_PUBLICURL: ${VIKUNJA_SERVICE_PUBLICURL:-${SERVICE_URL_VIKUNJA_3456}}
+      VIKUNJA_SERVICE_SECRET: ${VIKUNJA_SERVICE_SECRET:-${SERVICE_PASSWORD_VIKUNJA}}
+      VIKUNJA_DATABASE_HOST: db
+      VIKUNJA_DATABASE_TYPE: postgres
+      VIKUNJA_DATABASE_USER: ${POSTGRES_USER:-vikunja}
+      VIKUNJA_DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-${SERVICE_PASSWORD_POSTGRES}}
+      VIKUNJA_DATABASE_DATABASE: ${POSTGRES_DB:-vikunja}
+    volumes:
+      - vikunja_files:/app/vikunja/files
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/app/vikunja/vikunja", "healthcheck"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 45s
+    restart: unless-stopped
+
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vikunja}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-${SERVICE_PASSWORD_POSTGRES}}
+      POSTGRES_DB: ${POSTGRES_DB:-vikunja}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+volumes:
+  vikunja_files:
+  postgres_data:
