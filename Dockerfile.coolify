@@ -1,0 +1,39 @@
+# Build nativo per Coolify: niente xgo, niente scratch.
+# xgo OOM/fail su VPS; Coolify inietta tutte le env come --build-arg.
+
+FROM node:24.21.0-alpine AS frontendbuilder
+WORKDIR /build
+ENV PNPM_CACHE_FOLDER=.cache/pnpm/
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV CYPRESS_INSTALL_BINARY=0
+COPY frontend/pnpm-lock.yaml frontend/package.json frontend/pnpm-workspace.yaml ./
+RUN npm install -g corepack && corepack enable && pnpm install --frozen-lockfile
+COPY frontend/ ./
+ARG RELEASE_VERSION=dev
+RUN echo "{\"VERSION\": \"${RELEASE_VERSION/-g/-}\"}" > src/version.json && pnpm run build
+
+FROM golang:1.27-bookworm AS apibuilder
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev \
+	&& rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+COPY . ./
+COPY --from=frontendbuilder /build/dist ./frontend/dist
+ARG RELEASE_VERSION=dev
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+ENV CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH}
+RUN go build -trimpath \
+	-tags "osusergo netgo" \
+	-ldflags "-s -w -X code.vikunja.io/api/pkg/version.Version=${RELEASE_VERSION} -X 'main.Tags=osusergo netgo'" \
+	-o /out/vikunja .
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+	&& rm -rf /var/lib/apt/lists/*
+WORKDIR /app/vikunja
+COPY --from=apibuilder /out/vikunja /app/vikunja/vikunja
+EXPOSE 3456
+ENV VIKUNJA_SERVICE_ROOTPATH=/app/vikunja/
+ENV VIKUNJA_DATABASE_PATH=/db/vikunja.db
+ENV GODEBUG=multipathtcp=0
+ENTRYPOINT ["/app/vikunja/vikunja"]

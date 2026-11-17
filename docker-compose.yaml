@@ -6,7 +6,7 @@ services:
   vikunja:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.coolify
       args:
         RELEASE_VERSION: ${RELEASE_VERSION:-dev}
     # Named volume Coolify = root. L'immagine gira come 1000 e crasha su
@@ -26,6 +26,7 @@ services:
       VIKUNJA_DATABASE_PASSWORD: ${SERVICE_PASSWORD_POSTGRES}
       VIKUNJA_DATABASE_DATABASE: ${POSTGRES_DB:-vikunja}
       VIKUNJA_DATABASE_SSLMODE: disable
+      VIKUNJA_SERVICE_ENABLEREGISTRATION: ${VIKUNJA_SERVICE_ENABLEREGISTRATION:-false}
     volumes:
       - vikunja_files:/app/vikunja/files
     depends_on:
